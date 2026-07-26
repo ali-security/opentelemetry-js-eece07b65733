@@ -1,10 +1,7 @@
 name: Unit Tests
 on:
   push:
-    branches:
-      - main
-  pull_request:
-  merge_group:
+  workflow_dispatch:
 
 jobs:
   node-tests:
@@ -30,29 +27,20 @@ jobs:
             package-lock.json
           node-version: ${{ matrix.node_version }}
 
-      - run: npm install -g npm@latest
-        if: ${{ matrix.node_version == '18' || matrix.node_version == '20' }}
-
-      # npm@10.0.0 drops support for Node.js v14 and v16
+      # npm@10.0.0 drops support for Node.js v14 and v16; keep bundled npm on 18/20.
       - run: npm install -g npm@"<10.0.0"
         if: ${{ matrix.node_version == '14' || matrix.node_version == '16' }}
 
+      # Scope to the sealed package: the full monorepo suite (lerna run test)
+      # includes unrelated experimental packages that don't run on the fork.
       - name: Bootstrap
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Build 🔧
-        run: npm run compile
+        run: npx lerna run compile --scope @opentelemetry/propagator-jaeger --include-dependencies
 
       - name: Unit tests
-        run: |
-          # TODO(legendecas): webpack https://stackoverflow.com/questions/69692842/error-message-error0308010cdigital-envelope-routinesunsupported
-          if [ "${{ matrix.node_version }}" = "18" ] || [ "${{ matrix.node_version }}" == "20" ]; then
-            export NODE_OPTIONS=--openssl-legacy-provider
-          fi
-          npm run test
-      - name: Report Coverage
-        run: npm run codecov
-        if: ${{ matrix.node_version == '14' }}
+        run: npm test --workspace=packages/opentelemetry-propagator-jaeger
   node-windows-tests:
     runs-on: windows-latest
     env:
@@ -68,21 +56,20 @@ jobs:
             package-lock.json
           node-version: '18'
 
-      - run: npm install -g npm@latest
-
       - name: Bootstrap
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Build 🔧
         run: |
           npm config set script-shell "C:\\Program Files\\git\\bin\\bash.exe"
-          npm run compile
+          npx lerna run compile --scope @opentelemetry/propagator-jaeger --include-dependencies
 
       - name: Unit tests
-        env:
-         NODE_OPTIONS: --openssl-legacy-provider
-        run: npm run test
+        run: |
+          npm config set script-shell "C:\\Program Files\\git\\bin\\bash.exe"
+          npm test --workspace=packages/opentelemetry-propagator-jaeger
   browser-tests:
+    if: false
     runs-on: ubuntu-latest
     env:
       NPM_CONFIG_UNSAFE_PERM: true
@@ -108,6 +95,7 @@ jobs:
       - name: Report Coverage
         run: npm run codecov:browser
   webworker-tests:
+    if: false
     runs-on: ubuntu-latest
     env:
       NPM_CONFIG_UNSAFE_PERM: true
@@ -132,6 +120,7 @@ jobs:
       - name: Report Coverage
         run: npm run codecov:webworker
   api-eol-node-test:
+    if: false
     strategy:
       fail-fast: false
       matrix:

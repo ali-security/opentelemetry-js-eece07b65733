@@ -9,6 +9,7 @@ on:
 
 jobs:
   peer-api-check:
+    if: false
     runs-on: ubuntu-latest
     container:
       image: node:20

@@ -1,0 +1,73 @@
+name: Seal Build
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  # Produce the publishable artifact: @opentelemetry/propagator-jaeger .tgz
+  build:
+    runs-on: ubuntu-latest
+    env:
+      NPM_CONFIG_UNSAFE_PERM: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '21'
+
+      - name: Bootstrap
+        run: npm ci --ignore-scripts
+
+      - name: Compile (scoped)
+        run: npx lerna run compile --scope @opentelemetry/propagator-jaeger --include-dependencies
+
+      - name: Pack
+        run: |
+          npm pack --workspace=packages/opentelemetry-propagator-jaeger --pack-destination=./dist
+          mv ./dist/opentelemetry-propagator-jaeger-1.19.0.tgz ./dist/propagator-jaeger-1.19.0.tgz
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: propagator-jaeger
+          path: ./dist/propagator-jaeger-1.19.0.tgz
+          if-no-files-found: error
+
+  # Run the package's full test suite across the supported Node matrix.
+  # Package engines require node >=14 (mocha@10 / nyc@15 drop <14); node 8/10/12
+  # are only exercised against ./api upstream and cannot run this package.
+  node-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        node_version:
+          - "14"
+          - "16"
+          - "18"
+          - "20"
+          - "21"
+    runs-on: ubuntu-latest
+    env:
+      NPM_CONFIG_UNSAFE_PERM: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node_version }}
+
+      # npm@10 drops Node 14/16; keep bundled npm on 18/20/21.
+      - run: npm install -g npm@"<10.0.0"
+        if: ${{ matrix.node_version == '14' || matrix.node_version == '16' }}
+
+      - name: Bootstrap
+        run: npm ci --ignore-scripts
+
+      - name: Compile (scoped)
+        run: npx lerna run compile --scope @opentelemetry/propagator-jaeger --include-dependencies
+
+      - name: Unit tests
+        run: npm test --workspace=packages/opentelemetry-propagator-jaeger
